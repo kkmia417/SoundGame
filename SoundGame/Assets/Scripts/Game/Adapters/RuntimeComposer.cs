@@ -1,8 +1,12 @@
-// WHY: 依存のnew/組み立てを一箇所に集約（簡易DI）。ServiceLocatorは避け、明示依存で安全。
-// AnimationCurve→Func<float,float> に変換してCoreマッパーへ注入。
+// WHY:
+// - 依存のnew/組み立てを一箇所に集約（簡易DI）。ServiceLocatorは避け、明示依存で安全。
+// - Hz→高さの変換は HeightMappingUtility に委譲し、マジックナンバー（440, 69 等）や重複ロジックを排除。
+// - AnimationCurve は Utility 内で 0..1 正規化後に評価され、ガンマ/ゲイン/スナップ等も SO の設定に従う。
+
 using UnityEngine;
 using Game.Core;
 using Game.Pitch;
+using Game.Core.Mapping; // HeightMappingUtility
 
 namespace Game.Adapters
 {
@@ -20,14 +24,30 @@ namespace Game.Adapters
 
         private void Awake()
         {
-            if (_settings == null){ Debug.LogError("RuntimeComposer: settings not assigned."); enabled = false; return; }
+            if (_settings == null)
+            {
+                Debug.LogError("RuntimeComposer: settings not assigned.");
+                enabled = false;
+                return;
+            }
 
-            Detector = _useYin ? (IPitchDetector)new YinPitchDetector() : null; // 代替検出器を後で追加可
-            System.Func<float,float> f = hz => _settings.hzToHeight.Evaluate(hz);
-            Mapper = new PitchToHeightMapper(f, _settings.minHz, _settings.maxHz, _settings.minHeight, _settings.maxHeight,
-                _settings.confidenceThreshold, _settings.pitchLerp);
+            // ピッチ検出器の選択（将来差し替え可能）
+            Detector = _useYin ? (IPitchDetector)new YinPitchDetector() : null;
 
-            Mic = new UnityMicrophoneInput(_settings.deviceName, _settings.sampleRate, _settings.frameSec);
+            // Hz→高さのマッピングはユーティリティに集約
+            System.Func<float, float> f = hz => HeightMappingUtility.EvaluateHeight(_settings, hz);
+
+            // Core側マッパー（スムージング/Confidenceしきい値/Clamp はここで実施）
+            Mapper = new PitchToHeightMapper(
+                f,
+                _settings.minHz, _settings.maxHz,
+                _settings.minHeight, _settings.maxHeight,
+                _settings.confidenceThreshold,
+                _settings.pitchLerp
+            );
+
+            // マイク入力とフレームバッファ
+            Mic   = new UnityMicrophoneInput(_settings.deviceName, _settings.sampleRate, _settings.frameSec);
             _frame = new float[Mathf.CeilToInt(_settings.sampleRate * _settings.frameSec)];
         }
     }
