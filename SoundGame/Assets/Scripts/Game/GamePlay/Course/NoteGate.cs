@@ -1,11 +1,13 @@
 // WHY:
-// - ランタイムで安全に動くよう UnityEditor API は使わず、直接代入(SetParameters)で値を注入。
-// - 音名→周波数→高さ変換は PitchControlSettings.hzToHeight と同一曲線で行い、入力系と座標系を統一。
-// - 障害物は上下2枚の壁で“穴”を表現（軽量・堅牢）。中央にGateTriggerを置き、スコアは別コンポ(GateScore)に委譲。
+// - UnityEditor APIは使わず、SetParametersで明示的に値注入（Runtime/Editor両対応で安全）。
+// - 音名→周波数→高さは HeightMappingUtility に委譲し、マジックナンバー(440, 69等)と重複ロジックを排除。
+// - 入力系と同一の曲線・オプション（log2, ゲイン, ガンマ, スナップ）で座標系を統一し、見た目と操作の一致を担保。
+// - 障害物は上下2枚の壁で“穴”を表現（軽量・堅牢）。中央の GateTrigger にスコア責務（GateScore）を委譲。
 
 using UnityEngine;
-using Game.Adapters;           // PitchControlSettings
-using Game.Core.Music;        // NoteName, MusicNotes
+using Game.Adapters;            // PitchControlSettings
+using Game.Core.Music;         // NoteName, MusicNotes, MusicTheory
+using Game.Core.Mapping;       // HeightMappingUtility
 
 namespace Game.Gameplay.Course
 {
@@ -20,14 +22,14 @@ namespace Game.Gameplay.Course
         [SerializeField] private int _octave = 4;
 
         [Header("Wall Params")]
-        [SerializeField] private float _wallWidth = 1.2f;
-        [SerializeField] private float _wallDepth = 5f;
-        [SerializeField] private float _holeSize  = 1.2f;
+        [SerializeField] private float _wallWidth  = 1.2f;
+        [SerializeField] private float _wallDepth  = 5f;
+        [SerializeField] private float _holeSize   = 1.2f;
         [SerializeField] private float _wallHeight = 8f;
 
         private GameObject _built;
 
-        // —— 外部からまとめて設定するための明示API（Editor/Runtime共通）——
+        // 外部からまとめて設定するための明示API（Editor/Runtime共通）
         public void SetParameters(
             PitchControlSettings settings, Material wallMaterial,
             NoteName note, int octave,
@@ -52,9 +54,12 @@ namespace Game.Gameplay.Course
                 return;
             }
 
-            // 音名→Hz→高さ
-            float hz    = MusicNotes.Frequency(_note, _octave, 440f);
-            float holeY = Mathf.Clamp(_settings.hzToHeight.Evaluate(hz), _settings.minHeight, _settings.maxHeight);
+            // 音名→Hz（基準は MusicTheory.A4_Hz に集約）
+            float hz = MusicNotes.Frequency(_note, _octave, MusicTheory.A4_Hz);
+
+            // 同一ユーティリティで高さに変換（入力と完全一致のルール）
+            float holeY = HeightMappingUtility.EvaluateHeight(_settings, hz);
+            holeY = Mathf.Clamp(holeY, _settings.minHeight, _settings.maxHeight);
 
             // 既存を破棄
             if (_built != null)
@@ -64,13 +69,14 @@ namespace Game.Gameplay.Course
             }
 
             // 壁生成（上下二分割＋中央トリガー）
-            var p = new ObstacleHoleWallBuilder.Params{
-                wallWidth = _wallWidth,
-                wallDepth = _wallDepth,
-                wallHeight = _wallHeight,
+            var p = new ObstacleHoleWallBuilder.Params
+            {
+                wallWidth   = _wallWidth,
+                wallDepth   = _wallDepth,
+                wallHeight  = _wallHeight,
                 holeCenterY = holeY,
-                holeSize = _holeSize,
-                wallMaterial = _wallMaterial
+                holeSize    = _holeSize,
+                wallMaterial= _wallMaterial
             };
             _built = ObstacleHoleWallBuilder.Build(gameObject, in p);
             _built.transform.localPosition = Vector3.zero;
@@ -84,7 +90,7 @@ namespace Game.Gameplay.Course
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            // エディタ上で値変更時は即見た目更新（再生中は負荷・実行順の都合で控える）
+            // エディタ上で値変更時は即見た目更新（再生中は負荷回避）
             if (!Application.isPlaying) Rebuild();
         }
 #endif

@@ -506,14 +506,14 @@ MonoBehaviour:
   _sequence: {fileID: 11400000, guid: 04d5641fbff24401b88370d466bb774d, type: 2}
   _settings: {fileID: 11400000, guid: 3279c0ec71b2d48ecb78ec4389d8d1a8, type: 2}
   _wallMaterial: {fileID: 0}
-  _playerBall: {fileID: 1680026040}
   _startOffset: 8
-  _spacing: 6
+  _spacing: 10
   _z: 0
   _wallWidth: 1.2
-  _wallDepth: 5
+  _wallDepth: 8
   _holeSize: 1.2
-  _wallHeight: 8
+  _wallHeight: 12
+  _autoBuildOnPlay: 1
 --- !u!1 &1322714626
 GameObject:
   m_ObjectHideFlags: 0
