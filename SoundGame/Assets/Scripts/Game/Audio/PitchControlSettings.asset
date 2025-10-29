@@ -45,4 +45,8 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   minHeight: 0.5
-  maxHeight: 6
+  maxHeight: 120
+  useLogMapping: 1
+  heightGain: 1.4
+  heightPower: 0.8
+  snapToSemitone: 0
