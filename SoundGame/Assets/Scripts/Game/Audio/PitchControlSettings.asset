@@ -16,8 +16,8 @@ MonoBehaviour:
   inputGain: 1
   sampleRate: 44100
   deviceName: 
-  minHz: 80
-  maxHz: 800
+  minHz: 240
+  maxHz: 540
   confidenceThreshold: 0.85
   pitchLerp: 0.25
   hzToHeight:
@@ -44,9 +44,12 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  minHeight: 0.5
-  maxHeight: 120
+  minHeight: 0
+  maxHeight: 12
+  globalHeightOffset: 2
   useLogMapping: 1
-  heightGain: 1.4
+  heightGain: 1.5
   heightPower: 0.8
   snapToSemitone: 0
+  quantizeSemitoneHeights: 1
+  quantizeDivisions: 12
