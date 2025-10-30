@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.18028373, g: 0.22571398, b: 0.30692294, a: 1}
+  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -252,13 +252,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 648099493}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.3216873, z: 0, w: 0.94684595}
-  m_LocalPosition: {x: -2.02, y: 5.54, z: -14.53}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -20}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 37.53, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &695967061
 GameObject:
   m_ObjectHideFlags: 0
@@ -452,13 +452,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 737449288}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.31730464, z: 0, w: 0.94832367}
-  m_LocalPosition: {x: 0, y: -1.28, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 116.4, y: -0.9, z: 0}
+  m_LocalScale: {x: 23.71, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 37, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &811524017
 GameObject:
   m_ObjectHideFlags: 0
@@ -485,7 +485,7 @@ Transform:
   m_GameObject: {fileID: 811524017}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: -1, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -505,14 +505,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _sequence: {fileID: 11400000, guid: 04d5641fbff24401b88370d466bb774d, type: 2}
   _settings: {fileID: 11400000, guid: 3279c0ec71b2d48ecb78ec4389d8d1a8, type: 2}
-  _wallMaterial: {fileID: 0}
+  _wallMaterial: {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
   _startOffset: 20
   _spacing: 30
   _z: 0
   _wallWidth: 1.2
   _wallDepth: 8
   _holeSize: 2.4
-  _wallHeight: 12
+  _wallHeight: 15
   _autoBuildOnPlay: 1
 --- !u!1 &1322714626
 GameObject:
@@ -767,7 +767,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _input: {fileID: 1643718558}
   _followSpeed: 4
-  _baseXSpeed: 3
+  _baseXSpeed: 6
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
