@@ -1,31 +1,98 @@
-// WHY: UnityのMicrophone API依存をAdaptersに隔離。Coreは純ロジックのまま。
-// リングバッファから直近フレームを安全に切り出す（ラップ対応）。
+using System;
+using System.Linq;
 using UnityEngine;
-using Game.Core;
+using Game.Adapters.Audio;
 
 namespace Game.Adapters
 {
-    public sealed class UnityMicrophoneInput : IMicrophoneInput
+    /// <summary>
+    /// Microphone input wrapper that pushes samples into a lock-free ring buffer
+    /// and delivers fixed-size frames without GC allocations.
+    /// </summary>
+    public sealed class UnityMicrophoneInput
     {
-        private readonly string _device; private readonly int _sampleRate; private readonly int _frameSize;
+        private readonly int _targetSampleRate;
+        private readonly int _channels;
+        private readonly RingBuffer _rb;
+        private readonly float[] _pullTemp; // fixed reusable chunk for GetData
         private AudioClip _clip;
+        private string _device;
+        private int _clipSamples;
+        private int _micPosPrev;
 
-        public UnityMicrophoneInput(string device, int sampleRate, float frameSec)
+        public int SampleRate => _targetSampleRate;
+        public int Channels => _channels;
+        public int BufferedSamples => _rb.Count;
+
+        public UnityMicrophoneInput(string deviceName, int requestedSampleRate, int channels, int ringBufferSeconds = 2)
         {
-            _device = device; _sampleRate = sampleRate; _frameSize = Mathf.Max(128, Mathf.CeilToInt(sampleRate * frameSec));
-            _clip = Microphone.Start(_device, true, 1, _sampleRate); // 1秒リングバッファ
+            _device = deviceName;
+            // Prefer actual output sample rate in Unity runtime to avoid mismatch
+            _targetSampleRate = AudioSettings.outputSampleRate > 0 ? AudioSettings.outputSampleRate : requestedSampleRate;
+            _channels = Math.Max(1, channels);
+            _rb = new RingBuffer(Math.Max(1024, _targetSampleRate * ringBufferSeconds));
+            _pullTemp = new float[Math.Max(256, _targetSampleRate / 10)]; // ~100ms
         }
 
-        public bool TryGetFrame(float[] buffer, out int samples)
+        public void Start()
         {
-            samples = 0;
-            if (_clip == null || !Microphone.IsRecording(_device)) return false;
-            int pos = Microphone.GetPosition(_device); if (pos <= 0) return false;
+            // device select fallback
+            if (string.IsNullOrEmpty(_device) || !Microphone.devices.Contains(_device))
+            {
+                _device = Microphone.devices.FirstOrDefault();
+            }
 
-            int start = pos - _frameSize; if (start < 0) start += _clip.samples;
-            if (start + _frameSize <= _clip.samples) _clip.GetData(buffer, start);
-            else { var temp = new float[_frameSize]; _clip.GetData(temp, start); _clip.GetData(temp, 0); System.Array.Copy(temp, 0, buffer, 0, _frameSize); }
-            samples = _frameSize; return true;
+            _clip = Microphone.Start(_device, true, 1, _targetSampleRate);
+            _clipSamples = _clip != null ? _clip.samples : 0;
+            _micPosPrev = 0;
+        }
+
+        public void Stop()
+        {
+            if (_clip != null && !string.IsNullOrEmpty(_device))
+            {
+                Microphone.End(_device);
+            }
+            _clip = null;
+        }
+
+        /// <summary>
+        /// Call this from Update to pump new microphone samples into the ring buffer.
+        /// </summary>
+        public void Pump()
+        {
+            if (_clip == null || string.IsNullOrEmpty(_device)) return;
+            if (!Microphone.IsRecording(_device)) return;
+
+            int pos = Microphone.GetPosition(_device);
+            if (pos < 0 || pos > _clipSamples) return;
+
+            int delta = pos - _micPosPrev;
+            if (delta < 0) delta += _clipSamples; // wrapped
+
+            // pull in chunks
+            int pulled = 0;
+            while (delta > 0)
+            {
+                int chunk = Math.Min(delta, _pullTemp.Length);
+                int start = (_micPosPrev + pulled) % _clipSamples;
+                _clip.GetData(_pullTemp, start);
+                _rb.Enqueue(_pullTemp.AsSpan(0, chunk));
+                pulled += chunk;
+                delta -= chunk;
+            }
+            _micPosPrev = pos;
+        }
+
+        /// <summary>
+        /// Try to dequeue exactly dst.Length samples. Returns false when not enough.
+        /// </summary>
+        public bool TryDequeueFrame(Span<float> dst)
+        {
+            if (_rb.Count < dst.Length) return false;
+            _rb.Dequeue(dst);
+            // Stereo->Mono, resampling etc. can be done here if needed.
+            return true;
         }
     }
 }
