@@ -1,47 +1,71 @@
-// RATIONALE（なぜこうするか）
-// - マッピングはゲームデザイン依存の“パラメトリックな関数”であり、Unity APIに依存させない。
-// - 関数型インジェクション(Func<float,float>)で曲線を差し替え可能（SOや外部設定から適用）。
-// - 代替案：UnityEngine.AnimationCurveを直接参照→CoreがUnity依存になりテスト性低下。
-// - Lerp/Clampも自前：Coreを.NET標準のみにするため。
-
 using System;
+using UnityEngine;
 
 namespace Game.Core
 {
     public sealed class PitchToHeightMapper : IPitchToHeightMapper
     {
-        private readonly Func<float, float> _hzToHeight;
-        private readonly float _minHz, _maxHz, _minH, _maxH, _lerp;
-        private readonly float _confidenceThresh;
-        private float _smoothHz = 0f;
+        private readonly PitchControlSettings _s;
+        private float _lastHeight;
+        private float _lastSemitone;
+        private bool _hasLast;
 
-        public PitchToHeightMapper(
-            Func<float, float> hzToHeight,
-            float minHz, float maxHz,
-            float minHeight, float maxHeight,
-            float confidenceThreshold,
-            float pitchLerp)
+        public PitchToHeightMapper(PitchControlSettings settings)
         {
-            _hzToHeight = hzToHeight ?? (hz => hz); // デフォルト：恒等
-            _minHz = minHz; _maxHz = maxHz;
-            _minH = minHeight; _maxH = maxHeight;
-            _confidenceThresh = confidenceThreshold;
-            _lerp = pitchLerp;
+            _s = settings;
         }
 
-        public bool TryMap(PitchEstimate e, out float height)
+        public float Map(float hz, float confidence, double time)
         {
-            height = 0f;
-            if (!e.IsValid || e.Confidence < _confidenceThresh) return false;
+            // Confidence gating
+            if (confidence < _s.confidenceThreshold || hz <= 0f)
+                return _hasLast ? _lastHeight : _s.minHeight;
 
-            _smoothHz = _smoothHz <= 0 ? e.Hz : Lerp(_smoothHz, e.Hz, 1f - _lerp);
-            float clampedHz = Clamp(_smoothHz, _minHz, _maxHz);
-            float mapped = _hzToHeight(clampedHz);
-            height = Clamp(mapped, _minH, _maxH);
-            return true;
+            // Hz -> semitone (MIDI-like)
+            float semitone = 12f * (float)Math.Log(hz / 440f, 2.0) + 69f;
+
+            // Clamp rate of change (octave jump suppression)
+            if (_hasLast)
+            {
+                float maxDelta = _s.maxSemitonePerSec * Time.deltaTime;
+                float delta = Mathf.Clamp(semitone - _lastSemitone, -maxDelta, maxDelta);
+                semitone = _lastSemitone + delta;
+            }
+
+            // Snap & hysteresis
+            if (_s.snapToSemitone)
+            {
+                float q = _s.quantizeSemitoneHeights ? Mathf.Max(1, _s.quantizeDivisions) : 1f;
+                float target = Mathf.Round(semitone * q) / q;
+
+                if (_hasLast)
+                {
+                    float band = Mathf.Max(0f, _s.snapHysteresis);
+                    if (Mathf.Abs(target - _lastSemitone) < band)
+                        target = _lastSemitone;
+                }
+                semitone = target;
+            }
+
+            // Normalize to [0,1] over semitone range
+            float t = (semitone - _s.minSemitone) / Mathf.Max(1e-5f, (_s.maxSemitone - _s.minSemitone));
+            t = Mathf.Clamp01(t);
+
+            if (_s.useLogMapping)
+                t = Mathf.Pow(t, Mathf.Max(1e-3f, _s.heightPower));
+
+            float height = Mathf.Lerp(_s.minHeight, _s.maxHeight, t);
+            height = height * _s.heightGain + _s.globalHeightOffset;
+
+            // Confidence-driven smoothing
+            float lerp = Mathf.Lerp(_s.minLerp, _s.maxLerp, Mathf.Clamp01(confidence));
+            height = Mathf.Lerp(_hasLast ? _lastHeight : height, height, lerp);
+
+            _lastHeight = height;
+            _lastSemitone = semitone;
+            _hasLast = true;
+
+            return height;
         }
-
-        private static float Clamp(float v, float a, float b) => v < a ? a : (v > b ? b : v);
-        private static float Lerp(float a, float b, float t) => a + (b - a) * t;
     }
 }
