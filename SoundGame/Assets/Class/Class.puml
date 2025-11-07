@@ -1,0 +1,214 @@
+@startuml
+' ========= Theme =========
+skinparam backgroundColor #1E1E1E
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam dpi 180
+
+skinparam defaultFontName "Hiragino Sans"
+skinparam class {
+  BackgroundColor #2B2B2B
+  BorderColor #A0A0A0
+  FontColor #FFFFFF
+  ArrowColor #CFCFCF
+}
+skinparam package {
+  BackgroundColor #262626
+  BorderColor #7A7A7A
+  FontColor #FFFFFF
+}
+skinparam stereotypeCBackgroundColor #444
+skinparam stereotypeFontColor #EEE
+skinparam Arrow {
+  Color #CFCFCF
+  Thickness 1.2
+}
+
+' Interface強調
+skinparam class {
+  BackgroundColor<<Interface>> #243B53
+  BorderColor<<Interface>> #7FB3FF
+  FontColor<<Interface>> #FFFFFF
+}
+skinparam class {
+  BackgroundColor<<ScriptableObject>> #3A2D3F
+  BorderColor<<ScriptableObject>> #C693D8
+}
+skinparam class {
+  BackgroundColor<<MonoBehaviour>> #2F3B2F
+  BorderColor<<MonoBehaviour>> #8FD18F
+}
+skinparam class {
+  BackgroundColor<<Singleton>> #2F2D3B
+  BorderColor<<Singleton>> #AA9CFF
+}
+
+title SoundGame – クラス構造図 (Colored)
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+
+' ====== パッケージ構成（色分け） ======
+package "Game.Adapters" #2E3A59 {
+  class RuntimeComposer <<MonoBehaviour>>
+  class PitchInputLoop <<MonoBehaviour>>
+  class UnityMicrophoneInput
+  class PitchControlSettings <<ScriptableObject>>
+}
+
+package "Game.Core" #334E35 {
+  interface IPitchDetector <<Interface>>
+  class PitchEstimate
+  interface IPitchToHeightMapper <<Interface>>
+  class PitchToHeightMapper
+  package "Mapping" #2C3E3C {
+    class HeightMappingUtility
+  }
+  package "Music" #2C3E3C {
+    class MusicNotes
+    class MusicTheory
+  }
+}
+
+package "Game.Pitch" #4E2F34 {
+  class YinPitchDetector
+}
+
+package "Game.Gameplay" #4A375A {
+  class PlayerBallController <<MonoBehaviour>>
+  class ScoreSystem <<MonoBehaviour,Singleton>>
+  class Ring <<MonoBehaviour>>
+  class GateScore <<MonoBehaviour>>
+  package "Course" #3E2F4A {
+    class ScaleCourseBuilder <<MonoBehaviour>>
+    class NoteGate <<MonoBehaviour>>
+    class ObstacleHoleWallBuilder
+  }
+}
+
+package "Game.Settings" #3C3F5A {
+  class NoteSequence <<ScriptableObject>>
+}
+
+package "Game.UI" #3A4C5E {
+  class PitchHud <<MonoBehaviour>>
+}
+
+package "Game.Services" #4B4040 {
+  class SaveService
+}
+
+' ====== 主要な関連 ======
+
+' DI/組み立て
+RuntimeComposer *-- UnityMicrophoneInput : compose
+RuntimeComposer *-- IPitchDetector : compose
+RuntimeComposer *-- IPitchToHeightMapper : compose
+RuntimeComposer o-- PitchControlSettings : uses
+
+' 入力ループ
+PitchInputLoop o-- RuntimeComposer : ref
+PitchInputLoop ..> UnityMicrophoneInput : read audio
+PitchInputLoop ..> IPitchDetector : detect pitch
+PitchInputLoop ..> IPitchToHeightMapper : map height
+PitchInputLoop o-- PitchControlSettings
+
+' 検出・写像
+IPitchDetector <|.. YinPitchDetector
+IPitchToHeightMapper <|.. PitchToHeightMapper
+PitchToHeightMapper ..> HeightMappingUtility
+HeightMappingUtility ..> MusicNotes
+MusicNotes ..> MusicTheory
+IPitchDetector ..> PitchEstimate
+
+' ゲームプレイ側
+PlayerBallController --> PitchInputLoop : read CurrentHeight
+ScoreSystem <-. Ring : +Add(score)
+ScoreSystem <-. GateScore : +Add(score)
+SaveService ..> ScoreSystem : load/save best
+PitchHud --> PitchInputLoop : display Hz/Conf/Height
+
+' コース自動生成
+ScaleCourseBuilder o-- NoteSequence
+ScaleCourseBuilder o-- PitchControlSettings
+ScaleCourseBuilder ..> NoteGate : build
+NoteGate ..> ObstacleHoleWallBuilder : build walls
+NoteGate ..> HeightMappingUtility : note->Y
+NoteGate o-- PitchControlSettings
+
+' ====== 代表プロパティ（主要のみ） ======
+class PitchEstimate {
+  +float Hz
+  +float Confidence
+}
+
+class UnityMicrophoneInput {
+  -float[] _ringBuffer
+  +bool TryGetFrame(out float[] data)
+}
+
+class PitchControlSettings {
+  ' Input
+  +int sampleRate
+  +float frameSec
+  +float inputGain
+  ' Detect
+  +float minHz
+  +float maxHz
+  ' Mapping
+  +float minHeight
+  +float maxHeight
+  +float globalHeightOffset
+  +bool  useLogMapping
+  +float heightGain
+  +float heightPower
+  +bool  snapToSemitone
+  +bool  quantizeSemitoneHeights
+  +int   quantizeDivisions
+  ' Smoothing
+  +float pitchLerp
+  +float confidenceThreshold
+}
+
+class PitchInputLoop {
+  +float? CurrentHz
+  +float? CurrentConfidence
+  +float? CurrentHeight
+}
+
+class PlayerBallController {
+  -float _followSpeed
+  -float _baseXSpeed
+}
+
+class NoteSequence {
+  +string[] Notes  ' e.g. "C4","D4","E4",...
+}
+
+class ScaleCourseBuilder {
+  -float _startOffsetZ
+  -float _spacingZ
+  -float _gateWidth
+  -float _gateHeight
+}
+
+class ScoreSystem {
+  +int CurrentScore
+  +event Action<int> OnScoreChanged
+  +void Add(int pts)
+}
+
+' ====== Legend ======
+legend left
+  <b>色の意味</b>
+  ■ Adapters / 入力層
+  ■ Core / 音高検出・写像
+  ■ Pitch / 検出器実装
+  ■ Gameplay / ゲーム処理
+  ■ Settings / データ(SO)
+  ■ UI / 表示
+  ■ Services / 永続化 等
+endlegend
+@enduml

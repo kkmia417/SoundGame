@@ -1,43 +1,47 @@
-// WHY: パラメータをコードから分離 → デザイナブル（保守性UP）。SO差し替えで難易度調整も容易。
 using UnityEngine;
 
 namespace Game.Adapters
 {
-    [CreateAssetMenu(fileName = "PitchControlSettings", menuName = "Game/Audio/PitchControlSettings")]
-    public class PitchControlSettings : ScriptableObject
+    [CreateAssetMenu(menuName = "Game/PitchControlSettings")]
+    public sealed class PitchControlSettings : ScriptableObject
     {
         [Header("Input")]
-        [Range(0.01f, 0.2f)] public float frameSec = 0.046f;
-        [Range(0f, 2f)] public float inputGain = 1f;
-        public int sampleRate = 44100;
         public string deviceName = null;
+        public int sampleRate = 48000;
+        public float frameSec = 0.05f;
+        public float inputGain = 1.0f;
 
         [Header("Detection")]
-        public float minHz = 80f;
-        public float maxHz = 800f;
-        [Range(0f, 1f)] public float confidenceThreshold = 0.85f;
+        public float minHz = 60f;
+        public float maxHz = 1500f;
+        public float confidenceThreshold = 0.3f;
+
+        [Header("Mapping (height output)")]
+        public float minHeight = -2f;
+        public float maxHeight =  2f;
+        public float globalHeightOffset = 0f;
+        public bool  useLogMapping = true;
+        public float heightGain = 1.0f;
+        public float heightPower = 1.2f;
+
+        [Header("Semitone range")]
+        public float minSemitone = 48f; // C3
+        public float maxSemitone = 84f; // C6
+
+        [Header("Snap & Stability")]
+        public bool  snapToSemitone = true;
+        public bool  quantizeSemitoneHeights = false;
+        public int   quantizeDivisions = 1;
+        public float snapHysteresis = 0.25f;   // half-semitone band
+        public float maxSemitonePerSec = 24f;  // rate limit (semitones/sec)
 
         [Header("Smoothing")]
-        [Range(0f, 1f)] public float pitchLerp = 0.25f;
+        public float minLerp = 0.08f;
+        public float maxLerp = 0.35f;
 
-        [Header("Mapping")]
-        // NOTE: ここは「Hz→高さ」を直接描く or 0..1正規化用カーブのどちらでもOK（ユーティリティ側で自動判別）
-        public AnimationCurve hzToHeight = AnimationCurve.EaseInOut(100, 0.5f, 800, 6f);
-        public float minHeight = 0.5f;
-        public float maxHeight = 6f;
-
-        [Header("Global Offset")]
-        public float globalHeightOffset = 0f; // ← 全体の高さを持ち上げ/下げる（ワールドY単位）
-
-        // 追加（Mapping Options）
-        [Header("Mapping Options (Height Emphasis)")]
-        public bool useLogMapping = true;                   // 半音刻みを等間隔にするlog2正規化
-        [Range(0.1f, 3f)] public float heightGain = 1.4f;   // 高さのゲイン（>1で差拡大）
-        [Range(0.1f, 3f)] public float heightPower = 0.8f;  // ガンマ補正（<1で中域を持ち上げ）
-        public bool snapToSemitone = false;                 // 半音にスナップ（離散段差）
-
-        [Header("Quantization")]
-        public bool quantizeSemitoneHeights = true;         // 半音ごとに高さを段階化
-        [Range(1, 48)] public int quantizeDivisions = 12;   // 何分割にするか（半音単位=12が基本）
+        // --- Backward-compat (legacy fields) ---
+        // 一部の古いスクリプトが参照している可能性があるため残す（新ロジックでは未使用）
+        [Tooltip("Deprecated: use minLerp/maxLerp instead")]
+        public float pitchLerp = 0.2f;
     }
 }
