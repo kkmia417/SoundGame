@@ -1,54 +1,45 @@
-// WHY:
-// - 依存のnew/組み立てを一箇所に集約（簡易DI）。ServiceLocatorは避け、明示依存で安全。
-// - Hz→高さの変換は HeightMappingUtility に委譲し、マジックナンバー（440, 69 等）や重複ロジックを排除。
-// - AnimationCurve は Utility 内で 0..1 正規化後に評価され、ガンマ/ゲイン/スナップ等も SO の設定に従う。
-
 using UnityEngine;
 using Game.Core;
 using Game.Pitch;
-using Game.Core.Mapping; // HeightMappingUtility
 
 namespace Game.Adapters
 {
+    /// <summary>Simple runtime composer (wires settings, mic, detector, mapper).</summary>
     public sealed class RuntimeComposer : MonoBehaviour
     {
         [SerializeField] private PitchControlSettings _settings;
-        [SerializeField] private bool _useYin = true;
 
-        public IMicrophoneInput Mic { get; private set; }
+        public UnityMicrophoneInput Mic { get; private set; }
         public IPitchDetector Detector { get; private set; }
         public IPitchToHeightMapper Mapper { get; private set; }
-        public int SampleRate => _settings != null ? _settings.sampleRate : 44100;
 
-        private float[] _frame; public float[] Frame => _frame;
+        public int SampleRate => _settings != null ? _settings.sampleRate : 48000;
+        public float MinHz => _settings != null ? _settings.minHz : 60f;
+        public float MaxHz => _settings != null ? _settings.maxHz : 1500f;
+
+        private float[] _frame;
+        public float[] Frame => _frame;
 
         private void Awake()
         {
             if (_settings == null)
             {
-                Debug.LogError("RuntimeComposer: settings not assigned.");
+                Debug.LogError("RuntimeComposer: PitchControlSettings is not assigned.", this);
                 enabled = false;
                 return;
             }
 
-            // ピッチ検出器の選択（将来差し替え可能）
-            Detector = _useYin ? (IPitchDetector)new YinPitchDetector() : null;
+            // Input
+            Mic = new UnityMicrophoneInput(_settings.deviceName, _settings.sampleRate, _settings.frameSec);
 
-            // Hz→高さのマッピングはユーティリティに集約
-            System.Func<float, float> f = hz => HeightMappingUtility.EvaluateHeight(_settings, hz);
+            // Detector (YINなど、あなたの実装に合わせて)
+            Detector = new YinPitchDetector();
 
-            // Core側マッパー（スムージング/Confidenceしきい値/Clamp はここで実施）
-            Mapper = new PitchToHeightMapper(
-                f,
-                _settings.minHz, _settings.maxHz,
-                _settings.minHeight, _settings.maxHeight,
-                _settings.confidenceThreshold,
-                _settings.pitchLerp
-            );
+            // NEW: hzToHeight デリゲートは不要。TryMap 実装のマッパーをそのまま使う
+            Mapper = new PitchToHeightMapper(_settings);
 
-            // マイク入力とフレームバッファ
-            Mic   = new UnityMicrophoneInput(_settings.deviceName, _settings.sampleRate, _settings.frameSec);
-            _frame = new float[Mathf.CeilToInt(_settings.sampleRate * _settings.frameSec)];
+            // Fixed-size frame buffer
+            _frame = new float[Mathf.CeilToInt(_settings.sampleRate * Mathf.Max(0.005f, _settings.frameSec))];
         }
     }
 }
