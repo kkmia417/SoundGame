@@ -1,49 +1,29 @@
+// WHY: Updateループを1か所に集中 → 他は“読み取り専用”で疎結合。デバッグ容易。
 using UnityEngine;
 using Game.Core;
 
 namespace Game.Adapters
 {
-    /// <summary>
-    /// Pulls a fixed-size audio frame, runs pitch detection and mapping in Update,
-    /// then exposes an atomic snapshot for consumers (physics/UI).
-    /// </summary>
     public sealed class PitchInputLoop : MonoBehaviour
     {
-        [SerializeField] private RuntimeComposer _composer;
-        [SerializeField] private int _frameSamples = 2048; // tune with latency budget
+        [SerializeField] private RuntimeComposer _ctx;
 
-        private float[] _frame;
-        private volatile PitchFrame? _latest;
-
-        private void Awake()
-        {
-            _frame = new float[_frameSamples];
-            _composer.Mic.Start();
-        }
-
-        private void OnDestroy()
-        {
-            _composer.Mic.Stop();
-        }
+        public float CurrentHz { get; private set; }
+        public float CurrentConfidence { get; private set; }
+        public float? CurrentHeight { get; private set; }
 
         private void Update()
         {
-            _composer.Mic.Pump();
+            if (_ctx == null || _ctx.Mic == null || _ctx.Frame == null || _ctx.Detector == null || _ctx.Mapper == null)
+                return;
 
-            if (_composer.Mic.TryDequeueFrame(_frame))
+            if (_ctx.Mic.TryGetFrame(_ctx.Frame, out var _))
             {
-                var est = _composer.Detector.Estimate(_frame);
-                float height = _composer.Mapper.Map(est.Hz, est.Confidence, Time.timeAsDouble);
-                _latest = new PitchFrame(est.Hz, est.Confidence, height, Time.timeAsDouble);
+                var est = _ctx.Detector.Estimate(_ctx.Frame, _ctx.SampleRate, _ctx.MinHz, _ctx.MaxHz);
+                CurrentHz = est.Hz;
+                CurrentConfidence = est.Confidence;
+                if (_ctx.Mapper.TryMap(est, out var h)) CurrentHeight = h; else CurrentHeight = null;
             }
-        }
-
-        public bool TryGetSnapshot(out PitchFrame frame)
-        {
-            var v = _latest;
-            if (v.HasValue) { frame = v.Value; return true; }
-            frame = default;
-            return false;
         }
     }
 }

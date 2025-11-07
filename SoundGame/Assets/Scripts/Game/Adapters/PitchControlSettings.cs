@@ -16,31 +16,32 @@ namespace Game.Adapters
         public float maxHz = 1500f;
         public float confidenceThreshold = 0.3f;
 
-        [Header("Mapping (basic)")]
+        [Header("Mapping (height output)")]
         public float minHeight = -2f;
-        public float maxHeight = 2f;
+        public float maxHeight =  2f;
         public float globalHeightOffset = 0f;
-        public bool useLogMapping = true;
+        public bool  useLogMapping = true;
         public float heightGain = 1.0f;
         public float heightPower = 1.2f;
-        public bool snapToSemitone = true;
-        public bool quantizeSemitoneHeights = false;
-        public int quantizeDivisions = 1;
 
-        [Header("Mapping (advanced semitone range)")]
-        public float minSemitone = 48f;  // C3
-        public float maxSemitone = 84f;  // C6
+        [Header("Semitone range")]
+        public float minSemitone = 48f; // C3
+        public float maxSemitone = 84f; // C6
 
         [Header("Snap & Stability")]
-        [Tooltip("Hysteresis band around last semitone to prevent chatter (in semitone units).")]
-        public float snapHysteresis = 0.25f;
-        [Tooltip("Max semitone change allowed per second.")]
-        public float maxSemitonePerSec = 24f;
+        public bool  snapToSemitone = true;
+        public bool  quantizeSemitoneHeights = false;
+        public int   quantizeDivisions = 1;
+        public float snapHysteresis = 0.25f;   // half-semitone band
+        public float maxSemitonePerSec = 24f;  // rate limit (semitones/sec)
 
         [Header("Smoothing")]
-        [Tooltip("Min smoothing factor at low confidence.")]
         public float minLerp = 0.08f;
-        [Tooltip("Max smoothing factor at high confidence.")]
         public float maxLerp = 0.35f;
+
+        // --- Backward-compat (legacy fields) ---
+        // 一部の古いスクリプトが参照している可能性があるため残す（新ロジックでは未使用）
+        [Tooltip("Deprecated: use minLerp/maxLerp instead")]
+        public float pitchLerp = 0.2f;
     }
 }
