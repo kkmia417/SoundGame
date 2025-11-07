@@ -1,71 +1,100 @@
 using System;
 using UnityEngine;
+using Game.Core;        // IPitchToHeightMapper, PitchEstimate
+using Game.Adapters;    // PitchControlSettings
 
-namespace Game.Core
+namespace Game.Pitch
 {
+    /// <summary>
+    /// Maps (Hz, Confidence) to a stable height value with octave jump suppression,
+    /// semitone snapping (with hysteresis) and confidence-driven smoothing.
+    /// </summary>
     public sealed class PitchToHeightMapper : IPitchToHeightMapper
     {
         private readonly PitchControlSettings _s;
+
         private float _lastHeight;
         private float _lastSemitone;
         private bool _hasLast;
 
         public PitchToHeightMapper(PitchControlSettings settings)
         {
-            _s = settings;
+            _s = settings ?? throw new ArgumentNullException(nameof(settings));
         }
 
-        public float Map(float hz, float confidence, double time)
+        /// <summary>
+        /// IPitchToHeightMapper contract:
+        /// Convert a pitch estimate into a height. Returns false when no valid value can be produced yet.
+        /// </summary>
+        public bool TryMap(PitchEstimate est, out float height)
         {
+            // 初期値
+            if (!_hasLast)
+            {
+                // 最初のフレームで値が不十分な場合、minHeightを返して false にする
+                if (est.Hz <= 0f || est.Confidence < _s.confidenceThreshold)
+                {
+                    height = _s.minHeight;
+                    return false;
+                }
+            }
+
             // Confidence gating
-            if (confidence < _s.confidenceThreshold || hz <= 0f)
-                return _hasLast ? _lastHeight : _s.minHeight;
+            if (est.Confidence < _s.confidenceThreshold || est.Hz <= 0f)
+            {
+                // 既に有効値を持っていればそれを保持
+                height = _hasLast ? _lastHeight : _s.minHeight;
+                return _hasLast;
+            }
 
-            // Hz -> semitone (MIDI-like)
-            float semitone = 12f * (float)Math.Log(hz / 440f, 2.0) + 69f;
+            // Hz -> semitone (MIDI-like). A4=440Hz -> 69
+            float semitone = 12f * (float)Math.Log(est.Hz / 440f, 2.0) + 69f;
 
-            // Clamp rate of change (octave jump suppression)
-            if (_hasLast)
+            // Octave jump suppression（Δセミトーン/秒を制限）
+            if (_hasLast && _s.maxSemitonePerSec > 0f)
             {
                 float maxDelta = _s.maxSemitonePerSec * Time.deltaTime;
                 float delta = Mathf.Clamp(semitone - _lastSemitone, -maxDelta, maxDelta);
                 semitone = _lastSemitone + delta;
             }
 
-            // Snap & hysteresis
+            // 半音スナップ + ヒステリシス
             if (_s.snapToSemitone)
             {
                 float q = _s.quantizeSemitoneHeights ? Mathf.Max(1, _s.quantizeDivisions) : 1f;
                 float target = Mathf.Round(semitone * q) / q;
 
-                if (_hasLast)
+                if (_hasLast && _s.snapHysteresis > 0f)
                 {
-                    float band = Mathf.Max(0f, _s.snapHysteresis);
+                    float band = _s.snapHysteresis; // 例: 0.25 = 半音の1/4
                     if (Mathf.Abs(target - _lastSemitone) < band)
                         target = _lastSemitone;
                 }
                 semitone = target;
             }
 
-            // Normalize to [0,1] over semitone range
+            // [minSemitone, maxSemitone] -> [0,1]
             float t = (semitone - _s.minSemitone) / Mathf.Max(1e-5f, (_s.maxSemitone - _s.minSemitone));
             t = Mathf.Clamp01(t);
 
             if (_s.useLogMapping)
                 t = Mathf.Pow(t, Mathf.Max(1e-3f, _s.heightPower));
 
-            float height = Mathf.Lerp(_s.minHeight, _s.maxHeight, t);
-            height = height * _s.heightGain + _s.globalHeightOffset;
+            float h = Mathf.Lerp(_s.minHeight, _s.maxHeight, t);
+            h = h * _s.heightGain + _s.globalHeightOffset;
 
-            // Confidence-driven smoothing
-            float lerp = Mathf.Lerp(_s.minLerp, _s.maxLerp, Mathf.Clamp01(confidence));
-            height = Mathf.Lerp(_hasLast ? _lastHeight : height, height, lerp);
+            // 信頼度連動スムージング
+            float lerp = Mathf.Lerp(_s.minLerp, _s.maxLerp, Mathf.Clamp01(est.Confidence));
+            h = Mathf.Lerp(_hasLast ? _lastHeight : h, h, lerp);
 
-            _lastHeight = height;
+            // 状態更新
+            _lastHeight = h;
             _lastSemitone = semitone;
             _hasLast = true;
 
-            return height;
+            height = h;
+            return true;
+            // 契約上「高さを出せたか」をboolで返す
         }
     }
 }
